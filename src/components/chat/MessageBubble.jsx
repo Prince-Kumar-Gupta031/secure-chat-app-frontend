@@ -43,7 +43,7 @@ function AttachmentPreview({ attachment }) {
             <div className="relative group max-w-[280px]">
                 <a href={url} target="_blank" rel="noreferrer" className="block">
                     <img src={url} alt={attachment.name}
-                         className="max-w-[280px] max-h-[280px] rounded-sm border border-border/40 object-cover" />
+                         className="w-full max-w-[280px] h-auto rounded-sm border border-border/40 object-cover" />
                 </a>
                 <button
                     data-testid="msg-download-btn"
@@ -101,7 +101,7 @@ export default function MessageBubble({ message, isOwn, senderName, showSender }
     const time = dayjs(message.created_at).format("HH:mm");
     return (
         <div className={`flex ${isOwn ? "justify-end" : "justify-start"} animate-fade-in`} data-testid={`msg-${message.id}`}>
-            <div className={`max-w-[85%] sm:max-w-[78%] md:max-w-[65%] px-3 py-2 rounded-md border ${
+            <div className={`max-w-[90vw] sm:max-w-[78%] md:max-w-[65%] px-3 py-2 rounded-md border ${
                 isOwn
                     ? "bg-bubble-sent border-accent/30 text-foreground rounded-br-sm"
                     : "bg-bubble-received border-border rounded-bl-sm"

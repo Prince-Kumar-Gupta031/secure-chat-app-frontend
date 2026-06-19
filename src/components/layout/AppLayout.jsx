@@ -116,9 +116,12 @@ export default function AppLayout() {
                 </div>
             )}
 
-            <main className="flex-1 min-w-0 flex flex-col pt-12 md:pt-0" data-testid="main-content">
-                <Outlet />
-            </main>
+            <main
+    className="flex-1 min-w-0 flex flex-col pt-12 md:pt-0 overflow-hidden"
+    data-testid="main-content"
+>
+    <Outlet />
+</main>
         </div>
     );
 }

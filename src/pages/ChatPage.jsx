@@ -167,7 +167,7 @@ export default function ChatPage() {
         : {};
 
     return (
-        <div className="flex flex-1 min-h-0 w-full">
+        <div className="flex flex-1 min-h-0 w-full overflow-hidden">
             {/* Sidebar */}
             <div className={`${chatId ? "hidden md:flex" : "flex"} md:w-80 w-full border-r border-border bg-card flex-col shrink-0`}>
                 <div className="p-3 md:p-4 border-b border-border">
@@ -234,7 +234,7 @@ export default function ChatPage() {
             </div>
 
             {/* Chat window */}
-            <div className={`${chatId ? "flex" : "hidden md:flex"} flex-1 flex-col min-w-0 bg-background`}>
+            <div className={`${chatId ? "flex" : "hidden md:flex"} flex-1 flex-col min-w-0 w-full bg-background overflow-hidden`}>
                 {!activeChat ? (
                     <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
                         <div className="h-16 w-16 rounded-md bg-accent/10 border border-accent/30 flex items-center justify-center mb-4">
@@ -297,7 +297,7 @@ export default function ChatPage() {
                             </Button>
                         </div>
 
-                        <ScrollArea className="flex-1 px-3 md:px-5 py-4 overflow-x-hidden">
+                        <ScrollArea className="flex-1 px-3 md:px-5 py-4 overflow-hidden">
                             <div className="space-y-2 max-w-3xl mx-auto w-full">
                                 {filteredMessages.map((m) => (
                                     <MessageBubble
