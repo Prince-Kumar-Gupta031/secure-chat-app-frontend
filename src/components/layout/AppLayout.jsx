@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useNavigate, useParams } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -31,10 +31,15 @@ export default function AppLayout() {
     const { theme, toggle } = useTheme();
     const { connected } = useSocket();
     const nav = useNavigate();
+    const { chatId } = useParams(); // detect if a chat is open on mobile
     const [drawerOpen, setDrawerOpen] = useState(false);
     const isAdmin = user && ["admin", "super_admin"].includes(user.role);
 
     if (!user) return null;
+
+    // On mobile, if a chat is open (chatId exists), hide the top bar entirely
+    // so ChatPage can use 100% height with its own header.
+    const chatOpenOnMobile = !!chatId;
 
     const SidebarContent = ({ onNavigate }) => (
         <>
@@ -48,7 +53,13 @@ export default function AppLayout() {
                         <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground mt-1">LAN COMMS</div>
                     </div>
                 </div>
-                <Button data-testid="drawer-close-btn" variant="ghost" size="icon" className="h-7 w-7 md:hidden" onClick={() => setDrawerOpen(false)}>
+                <Button
+                    data-testid="drawer-close-btn"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 md:hidden"
+                    onClick={() => setDrawerOpen(false)}
+                >
                     <X className="h-4 w-4" />
                 </Button>
             </div>
@@ -68,16 +79,27 @@ export default function AppLayout() {
                         {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
                     </Button>
                 </div>
-                <div className="flex items-center gap-2.5 p-2 rounded-md hover:bg-muted cursor-pointer" onClick={() => { nav("/profile"); onNavigate?.(); }}>
+                <div
+                    className="flex items-center gap-2.5 p-2 rounded-md hover:bg-muted cursor-pointer"
+                    onClick={() => { nav("/profile"); onNavigate?.(); }}
+                >
                     <Avatar className="h-8 w-8 border border-border">
                         {user.profile_picture && <AvatarImage src={`${BACKEND_URL}${user.profile_picture}`} />}
-                        <AvatarFallback className="text-xs font-mono bg-muted">{user.full_name.split(" ").map(s => s[0]).slice(0,2).join("")}</AvatarFallback>
+                        <AvatarFallback className="text-xs font-mono bg-muted">
+                            {user.full_name.split(" ").map(s => s[0]).slice(0, 2).join("")}
+                        </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
                         <div className="text-xs font-semibold truncate">{user.full_name}</div>
                         <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground truncate">{user.employee_id}</div>
                     </div>
-                    <Button data-testid="logout-btn" variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); logout(); }}>
+                    <Button
+                        data-testid="logout-btn"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={(e) => { e.stopPropagation(); logout(); }}
+                    >
                         <LogOut className="h-3.5 w-3.5" />
                     </Button>
                 </div>
@@ -86,42 +108,89 @@ export default function AppLayout() {
     );
 
     return (
-        <div className="min-h-screen flex bg-background overflow-hidden">
-            {/* Mobile top bar */}
-            <div className="md:hidden fixed top-0 inset-x-0 z-30 h-12 border-b border-border bg-card flex items-center justify-between px-3">
-                <div className="flex items-center gap-2">
-                    <Button data-testid="drawer-toggle-btn" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDrawerOpen(true)}>
-                        <Menu className="h-4 w-4" />
-                    </Button>
-                    <div className="flex items-center gap-1.5">
-                        <Shield className="h-4 w-4 text-accent" />
-                        <div className="font-heading font-black text-xs">DRDO SECURE</div>
-                    </div>
-                </div>
-                <Circle className={`h-2 w-2 ${connected ? "fill-success text-success" : "fill-muted-foreground text-muted-foreground"}`} />
-            </div>
+        /*
+         * overflow-hidden on the root prevents any panel from causing
+         * horizontal scroll on mobile.
+         */
+        <div className="flex h-screen bg-background overflow-hidden" style={{ height: "100dvh" }}>
 
-            {/* Sidebar - desktop */}
+            {/* ── Desktop sidebar ── */}
             <aside className="hidden md:flex w-60 border-r border-border bg-card flex-col shrink-0">
                 <SidebarContent />
             </aside>
 
-            {/* Sidebar - mobile drawer */}
+            {/* ── Mobile drawer (full-height overlay) ── */}
             {drawerOpen && (
-                <div className="md:hidden fixed inset-0 z-40 flex" onClick={() => setDrawerOpen(false)}>
-                    <aside className="w-64 max-w-[80vw] border-r border-border bg-card flex flex-col h-full animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                <div
+                    className="md:hidden fixed inset-0 z-40 flex"
+                    onClick={() => setDrawerOpen(false)}
+                >
+                    <aside
+                        className="w-64 max-w-[80vw] border-r border-border bg-card flex flex-col h-full"
+                        onClick={(e) => e.stopPropagation()}
+                    >
                         <SidebarContent onNavigate={() => setDrawerOpen(false)} />
                     </aside>
                     <div className="flex-1 bg-black/50" />
                 </div>
             )}
 
-            <main
-    className="flex-1 min-w-0 flex flex-col pt-12 md:pt-0 overflow-hidden"
-    data-testid="main-content"
->
-    <Outlet />
-</main>
+            {/*
+             * ── Main area ──
+             *
+             * On MOBILE:
+             *   • When NO chat is open  → show the top bar + Outlet (chat list fills below)
+             *   • When a chat IS open   → hide the top bar; ChatPage owns 100% of the screen
+             *     with its own header (back arrow) and input bar.
+             *
+             * On DESKTOP: always show top bar (it's only 48 px and useful for the menu icon).
+             */}
+            <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+
+                {/* Mobile top bar — hidden when a chat is open on mobile */}
+                <div
+                    className={`
+                        md:hidden fixed top-0 inset-x-0 z-30 h-12
+                        border-b border-border bg-card
+                        flex items-center justify-between px-3
+                        transition-transform duration-200
+                        ${chatOpenOnMobile ? "-translate-y-full pointer-events-none" : "translate-y-0"}
+                    `}
+                >
+                    <div className="flex items-center gap-2">
+                        <Button
+                            data-testid="drawer-toggle-btn"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setDrawerOpen(true)}
+                        >
+                            <Menu className="h-4 w-4" />
+                        </Button>
+                        <div className="flex items-center gap-1.5">
+                            <Shield className="h-4 w-4 text-accent" />
+                            <div className="font-heading font-black text-xs">DRDO SECURE</div>
+                        </div>
+                    </div>
+                    <Circle className={`h-2 w-2 ${connected ? "fill-success text-success" : "fill-muted-foreground text-muted-foreground"}`} />
+                </div>
+
+                {/*
+                 * Outlet wrapper:
+                 *   • Desktop always: pt-0 (sidebar handles layout)
+                 *   • Mobile, no chat: pt-12 to clear the top bar
+                 *   • Mobile, chat open: pt-0 so ChatPage owns full height
+                 */}
+                <main
+                    className={`
+                        flex-1 min-w-0 flex flex-col overflow-hidden
+                        ${chatOpenOnMobile ? "pt-0" : "pt-12 md:pt-0"}
+                    `}
+                    data-testid="main-content"
+                >
+                    <Outlet />
+                </main>
+            </div>
         </div>
     );
 }

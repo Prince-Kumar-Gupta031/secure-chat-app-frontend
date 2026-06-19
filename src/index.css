@@ -124,3 +124,70 @@ h1, h2, h3, h4, h5, h6, .font-heading {
         border-top-color: inherit; border-bottom-color: inherit;
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVENESS — added for WhatsApp-style mobile UX
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* 1. Hard-stop horizontal overflow on every screen */
+html,
+body {
+    max-width: 100vw;
+    overflow-x: hidden;
+}
+
+/* 2. Root fills the dynamic viewport height.
+      100dvh shrinks/grows as the browser address bar appears/disappears,
+      so the layout never gets clipped on Android Chrome or Safari. */
+#root {
+    height: 100dvh;
+    overflow: hidden;
+}
+
+/* 3. Fallback for browsers that don't support dvh yet (rare but safe) */
+@supports not (height: 100dvh) {
+    #root {
+        height: 100vh;
+        height: -webkit-fill-available; /* iOS Safari fallback */
+    }
+}
+
+/* 4. Tell iOS Safari the page height should use the full available space */
+html {
+    height: -webkit-fill-available;
+}
+
+/* 5. Momentum / inertia scrolling on iOS for all scroll containers */
+* {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* 6. Remove tap blue-flash on interactive elements (native-app feel) */
+button,
+a {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* 7. Images never blow out their container */
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+/* 8. Animate the pulse dot on the connection indicator */
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+}
+.animate-pulse-dot {
+    animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* 9. Slide-in animation used by the mobile drawer */
+@keyframes fade-in {
+    from { opacity: 0; transform: translateX(-8px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+.animate-fade-in {
+    animation: fade-in 0.15s ease-out both;
+}
