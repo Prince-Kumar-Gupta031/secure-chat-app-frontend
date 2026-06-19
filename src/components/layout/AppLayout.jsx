@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate, useParams } from "react-router-dom";
+import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -31,15 +31,19 @@ export default function AppLayout() {
     const { theme, toggle } = useTheme();
     const { connected } = useSocket();
     const nav = useNavigate();
-    const { chatId } = useParams(); // detect if a chat is open on mobile
+    const location = useLocation();
     const [drawerOpen, setDrawerOpen] = useState(false);
     const isAdmin = user && ["admin", "super_admin"].includes(user.role);
 
     if (!user) return null;
 
-    // On mobile, if a chat is open (chatId exists), hide the top bar entirely
-    // so ChatPage can use 100% height with its own header.
-    const chatOpenOnMobile = !!chatId;
+    // ── Detect if a specific chat is open on mobile ───────────────────────
+    // Route is /chat/:chatId — if pathname has a segment after /chat/ a chat is open.
+    // useLocation() works everywhere regardless of route nesting.
+    const pathParts = location.pathname.split("/").filter(Boolean);
+    // e.g. ["chat", "abc-123"]  → chatId = "abc-123"
+    //      ["chat"]             → no chatId
+    const chatOpenOnMobile = pathParts[0] === "chat" && pathParts.length >= 2;
 
     const SidebarContent = ({ onNavigate }) => (
         <>
@@ -108,25 +112,21 @@ export default function AppLayout() {
     );
 
     return (
-        /*
-         * overflow-hidden on the root prevents any panel from causing
-         * horizontal scroll on mobile.
-         */
-        <div className="flex h-screen bg-background overflow-hidden" style={{ height: "100dvh" }}>
+        <div className="flex bg-background overflow-hidden" style={{ height: "100dvh" }}>
 
-            {/* ── Desktop sidebar ── */}
+            {/* ── Desktop sidebar — always visible on md+ ── */}
             <aside className="hidden md:flex w-60 border-r border-border bg-card flex-col shrink-0">
                 <SidebarContent />
             </aside>
 
-            {/* ── Mobile drawer (full-height overlay) ── */}
+            {/* ── Mobile drawer overlay ── */}
             {drawerOpen && (
                 <div
                     className="md:hidden fixed inset-0 z-40 flex"
                     onClick={() => setDrawerOpen(false)}
                 >
                     <aside
-                        className="w-64 max-w-[80vw] border-r border-border bg-card flex flex-col h-full"
+                        className="w-64 max-w-[80vw] border-r border-border bg-card flex flex-col h-full animate-fade-in"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <SidebarContent onNavigate={() => setDrawerOpen(false)} />
@@ -135,57 +135,44 @@ export default function AppLayout() {
                 </div>
             )}
 
-            {/*
-             * ── Main area ──
-             *
-             * On MOBILE:
-             *   • When NO chat is open  → show the top bar + Outlet (chat list fills below)
-             *   • When a chat IS open   → hide the top bar; ChatPage owns 100% of the screen
-             *     with its own header (back arrow) and input bar.
-             *
-             * On DESKTOP: always show top bar (it's only 48 px and useful for the menu icon).
-             */}
+            {/* ── Main content area ── */}
             <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
 
-                {/* Mobile top bar — hidden when a chat is open on mobile */}
-                <div
-                    className={`
-                        md:hidden fixed top-0 inset-x-0 z-30 h-12
-                        border-b border-border bg-card
-                        flex items-center justify-between px-3
-                        transition-transform duration-200
-                        ${chatOpenOnMobile ? "-translate-y-full pointer-events-none" : "translate-y-0"}
-                    `}
-                >
-                    <div className="flex items-center gap-2">
-                        <Button
-                            data-testid="drawer-toggle-btn"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => setDrawerOpen(true)}
-                        >
-                            <Menu className="h-4 w-4" />
-                        </Button>
-                        <div className="flex items-center gap-1.5">
-                            <Shield className="h-4 w-4 text-accent" />
-                            <div className="font-heading font-black text-xs">DRDO SECURE</div>
+                {/*
+                  Mobile top bar:
+                  - Hidden when a chat is open (ChatPage shows its own header with back arrow)
+                  - Visible on the chat list screen
+                  - Never shown on desktop (md:hidden)
+                */}
+                {!chatOpenOnMobile && (
+                    <div className="md:hidden shrink-0 h-12 border-b border-border bg-card flex items-center justify-between px-3 z-10">
+                        <div className="flex items-center gap-2">
+                            <Button
+                                data-testid="drawer-toggle-btn"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => setDrawerOpen(true)}
+                            >
+                                <Menu className="h-4 w-4" />
+                            </Button>
+                            <div className="flex items-center gap-1.5">
+                                <Shield className="h-4 w-4 text-accent" />
+                                <div className="font-heading font-black text-xs">DRDO SECURE</div>
+                            </div>
                         </div>
+                        <Circle className={`h-2 w-2 ${connected ? "fill-success text-success" : "fill-muted-foreground text-muted-foreground"}`} />
                     </div>
-                    <Circle className={`h-2 w-2 ${connected ? "fill-success text-success" : "fill-muted-foreground text-muted-foreground"}`} />
-                </div>
+                )}
 
                 {/*
-                 * Outlet wrapper:
-                 *   • Desktop always: pt-0 (sidebar handles layout)
-                 *   • Mobile, no chat: pt-12 to clear the top bar
-                 *   • Mobile, chat open: pt-0 so ChatPage owns full height
-                 */}
+                  Outlet wrapper:
+                  - When chat open on mobile: no top padding, full height for ChatPage
+                  - Chat list on mobile: no extra padding needed (top bar is in-flow above)
+                  - Desktop: no top padding ever (sidebar handles layout)
+                */}
                 <main
-                    className={`
-                        flex-1 min-w-0 flex flex-col overflow-hidden
-                        ${chatOpenOnMobile ? "pt-0" : "pt-12 md:pt-0"}
-                    `}
+                    className="flex-1 min-w-0 flex flex-col overflow-hidden"
                     data-testid="main-content"
                 >
                     <Outlet />

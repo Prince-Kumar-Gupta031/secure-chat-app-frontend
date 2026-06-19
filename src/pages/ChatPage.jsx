@@ -35,7 +35,11 @@ export default function ChatPage() {
     const [showGroupInfo, setShowGroupInfo] = useState(false);
     const messagesEndRef = useRef(null);
     const fileRef = useRef(null);
+
+    // ── Typing debounce refs ──────────────────────────────────────────────
+    // We use refs (not state) for typing tracking so they never cause re-renders.
     const typingTimer = useRef(null);
+    const isTypingSent = useRef(false); // tracks whether we already emitted typing:true
 
     const loadChats = useCallback(async () => {
         const { data } = await api.get("/chats");
@@ -96,12 +100,17 @@ export default function ChatPage() {
 
     useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+    // ── Send ──────────────────────────────────────────────────────────────
     const send = async () => {
         if (!activeChat || !text.trim()) return;
         const trimmed = text.trim();
         setText("");
+        // Clear any pending typing debounce and emit typing:false immediately
+        clearTimeout(typingTimer.current);
+        isTypingSent.current = false;
         if (activeChat.is_group) sendTyping({ chat_id: activeChat.id, typing: false });
         else sendTyping({ peer_id: activeChat.peer.id, typing: false });
+
         const payload = activeChat.is_group
             ? { chat_id: activeChat.id, text: trimmed }
             : { peer_id: activeChat.peer.id, text: trimmed };
@@ -109,6 +118,7 @@ export default function ChatPage() {
         if (ack?.error) toast.error(ack.error);
     };
 
+    // ── Attachment ────────────────────────────────────────────────────────
     const onAttach = async (e) => {
         const file = e.target.files?.[0];
         e.target.value = "";
@@ -129,17 +139,44 @@ export default function ChatPage() {
         } finally { setUploading(false); }
     };
 
-    const onTextChange = (v) => {
+    // ── Text change — FIXED typing lag ───────────────────────────────────
+    //
+    // ROOT CAUSE OF LAG: the old code called sendTyping() on EVERY keystroke.
+    // sendTyping is a socket.emit which is async I/O — doing it 10x per second
+    // while also calling setText() caused React to batch poorly and the input
+    // felt stuck after 1 character.
+    //
+    // FIX:
+    //   1. setText() is called immediately and unconditionally — no side-effects.
+    //   2. sendTyping(true) is only emitted ONCE when the user starts typing
+    //      (guarded by isTypingSent ref). No more repeated emits per keystroke.
+    //   3. A 1500ms debounce timer emits sendTyping(false) after the user stops.
+    //      The timer resets on every keystroke but never blocks setText().
+    const onTextChange = useCallback((v) => {
+        // 1. Update input value immediately — this must be instant
         setText(v);
+
         if (!activeChat) return;
+
         const opts = activeChat.is_group
             ? { chat_id: activeChat.id, typing: true }
             : { peer_id: activeChat.peer.id, typing: true };
-        sendTyping(opts);
-        clearTimeout(typingTimer.current);
-        typingTimer.current = setTimeout(() => { sendTyping({ ...opts, typing: false }); }, 1500);
-    };
 
+        // 2. Only emit typing:true once per "typing session" (not every keystroke)
+        if (!isTypingSent.current) {
+            isTypingSent.current = true;
+            sendTyping(opts);
+        }
+
+        // 3. Debounce: reset the stop-typing timer on every keystroke
+        clearTimeout(typingTimer.current);
+        typingTimer.current = setTimeout(() => {
+            isTypingSent.current = false;
+            sendTyping({ ...opts, typing: false });
+        }, 1500);
+    }, [activeChat, sendTyping]);
+
+    // ── Filtering ─────────────────────────────────────────────────────────
     const filtered = chats.filter((c) => {
         if (!search) return true;
         const s = search.toLowerCase();
@@ -165,14 +202,9 @@ export default function ChatPage() {
         ? Object.fromEntries((activeChat.members || []).map((m) => [m.id, m.full_name]))
         : {};
 
-    // ─── shared chat-list panel ────────────────────────────────────────────
+    // ── Chat list panel ───────────────────────────────────────────────────
     const ChatList = () => (
-        /*
-         * On mobile  : full viewport width, full height (AppLayout gave us 100%)
-         * On desktop : fixed 320 px sidebar, border on right
-         */
-        <div className="flex flex-col w-full md:w-80 md:shrink-0 md:border-r md:border-border bg-card h-full overflow-hidden">
-            {/* Header */}
+        <div className="flex flex-col w-full h-full overflow-hidden bg-card">
             <div className="p-3 md:p-4 border-b border-border shrink-0">
                 <div className="flex items-center justify-between mb-2">
                     <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">CONVERSATIONS</div>
@@ -198,9 +230,7 @@ export default function ChatPage() {
                     />
                 </div>
             </div>
-
-            {/* List */}
-            <ScrollArea className="flex-1 overflow-y-auto">
+            <ScrollArea className="flex-1">
                 {filtered.length === 0 && (
                     <div className="p-6 text-center text-sm text-muted-foreground">
                         No conversations yet.{" "}
@@ -267,17 +297,10 @@ export default function ChatPage() {
         </div>
     );
 
-    // ─── chat window panel ─────────────────────────────────────────────────
+    // ── Chat window panel ─────────────────────────────────────────────────
     const ChatWindow = () => (
-        /*
-         * Takes up remaining width on desktop.
-         * On mobile it is the ONLY thing visible (ChatList is hidden via the
-         * outer conditional below).
-         */
         <div className="flex flex-col w-full min-w-0 h-full overflow-hidden bg-background">
             {!activeChat ? (
-                /* Desktop empty state — never shown on mobile because
-                   mobile always shows ChatList when chatId is absent */
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
                     <div className="h-16 w-16 rounded-md bg-accent/10 border border-accent/30 flex items-center justify-center mb-4">
                         <MessageSquare className="h-7 w-7 text-accent" strokeWidth={1.5} />
@@ -295,9 +318,8 @@ export default function ChatPage() {
                 </div>
             ) : (
                 <>
-                    {/* ── Chat header ── */}
+                    {/* Chat header */}
                     <div className="shrink-0 px-2 md:px-5 py-2 md:py-3 border-b border-border bg-card flex items-center gap-2 md:gap-3">
-                        {/* Back arrow — always visible on mobile */}
                         <Button
                             data-testid="chat-back-btn"
                             variant="ghost"
@@ -307,8 +329,6 @@ export default function ChatPage() {
                         >
                             <ArrowLeft className="h-5 w-5" />
                         </Button>
-
-                        {/* Contact info / group info */}
                         <button
                             data-testid="chat-header-info"
                             className="flex items-center gap-2 md:gap-3 flex-1 min-w-0 text-left hover:opacity-80 transition"
@@ -346,8 +366,6 @@ export default function ChatPage() {
                                 </div>
                             </div>
                         </button>
-
-                        {/* Message search — hidden on small mobile, visible sm+ */}
                         <div className="relative hidden sm:block shrink-0">
                             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                             <Input
@@ -358,8 +376,6 @@ export default function ChatPage() {
                                 className="pl-7 h-8 w-40 text-xs"
                             />
                         </div>
-
-                        {/* Close button — desktop only */}
                         <Button
                             data-testid="close-chat-btn"
                             variant="ghost"
@@ -371,7 +387,7 @@ export default function ChatPage() {
                         </Button>
                     </div>
 
-                    {/* ── Messages ── */}
+                    {/* Messages */}
                     <ScrollArea className="flex-1 overflow-hidden">
                         <div className="px-2 md:px-5 py-4 space-y-2 max-w-3xl mx-auto w-full">
                             {filteredMessages.map((m) => (
@@ -394,15 +410,17 @@ export default function ChatPage() {
                         </div>
                     </ScrollArea>
 
-                    {/* ── Input bar — always visible at bottom ── */}
-                    <div className="shrink-0 border-t border-border bg-card p-2 md:p-3 flex items-end gap-2"
-                         style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.5rem)" }}>
+                    {/* Input bar — always pinned to bottom */}
+                    <div
+                        className="shrink-0 border-t border-border bg-card p-2 md:p-3 flex items-center gap-2"
+                        style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.5rem)" }}
+                    >
                         <input ref={fileRef} type="file" hidden onChange={onAttach} data-testid="chat-file-input" />
                         <Button
                             data-testid="chat-attach-btn"
                             variant="ghost"
                             size="icon"
-                            className="shrink-0 self-end mb-0.5"
+                            className="shrink-0"
                             disabled={uploading}
                             onClick={() => fileRef.current?.click()}
                         >
@@ -415,12 +433,16 @@ export default function ChatPage() {
                             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
                             placeholder="Type a secure message…"
                             className="flex-1 min-w-0"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="sentences"
+                            spellCheck={false}
                         />
                         <Button
                             data-testid="chat-send-btn"
                             onClick={send}
                             disabled={!text.trim()}
-                            className="shrink-0 self-end mb-0.5"
+                            className="shrink-0"
                         >
                             <Send className="h-4 w-4" />
                         </Button>
@@ -431,23 +453,9 @@ export default function ChatPage() {
     );
 
     return (
-        /*
-         * Root container: fills whatever AppLayout's <main> gives us.
-         * overflow-hidden prevents any inner panel from causing horizontal scroll.
-         */
         <div className="flex w-full h-full overflow-hidden min-w-0">
 
-            {/*
-             * ── MOBILE LOGIC ──
-             *
-             * chatId present  → show ONLY ChatWindow (full screen)
-             * chatId absent   → show ONLY ChatList  (full screen)
-             *
-             * ── DESKTOP LOGIC ──
-             * Always show both side-by-side.
-             */}
-
-            {/* Chat List — full screen on mobile when no chat, sidebar on desktop */}
+            {/* Chat list — full screen on mobile when no chat open, sidebar on desktop */}
             <div className={`
                 ${chatId ? "hidden md:flex" : "flex"}
                 w-full md:w-80 md:shrink-0 md:border-r md:border-border
@@ -456,7 +464,7 @@ export default function ChatPage() {
                 <ChatList />
             </div>
 
-            {/* Chat Window — full screen on mobile when chat open, main area on desktop */}
+            {/* Chat window — full screen on mobile when chat open, main area on desktop */}
             <div className={`
                 ${chatId ? "flex" : "hidden md:flex"}
                 flex-1 min-w-0 h-full overflow-hidden
