@@ -167,7 +167,7 @@ export default function ChatPage() {
         : {};
 
     return (
-        <div className="flex flex-1 min-h-0 w-full overflow-hidden">
+        <div className="flex h-[calc(100vh-48px)] md:h-screen w-full overflow-hidden">
             {/* Sidebar */}
             <div className={`${chatId ? "hidden md:flex" : "flex"} md:w-80 w-full border-r border-border bg-card flex-col shrink-0`}>
                 <div className="p-3 md:p-4 border-b border-border">
@@ -297,7 +297,7 @@ export default function ChatPage() {
                             </Button>
                         </div>
 
-                        <ScrollArea className="flex-1 px-3 md:px-5 py-4 overflow-hidden">
+                        <ScrollArea className="flex-1 h-0 px-3 md:px-5 py-4">
                             <div className="space-y-2 max-w-3xl mx-auto w-full">
                                 {filteredMessages.map((m) => (
                                     <MessageBubble
@@ -319,7 +319,7 @@ export default function ChatPage() {
                             </div>
                         </ScrollArea>
 
-                        <div className="border-t border-border bg-card p-2 md:p-3 flex items-end gap-2">
+                        <div className="border-t border-border bg-card p-2 md:p-3 flex items-end gap-2 shrink-0">
                             <input ref={fileRef} type="file" hidden onChange={onAttach} data-testid="chat-file-input" />
                             <Button data-testid="chat-attach-btn" variant="ghost" size="icon" disabled={uploading} onClick={() => fileRef.current?.click()}>
                                 {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}

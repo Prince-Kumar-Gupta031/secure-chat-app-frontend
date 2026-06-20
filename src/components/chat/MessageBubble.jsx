@@ -110,7 +110,7 @@ export default function MessageBubble({ message, isOwn, senderName, showSender }
                     <div className="font-mono text-[10px] uppercase tracking-wider text-accent mb-0.5">{senderName}</div>
                 )}
                 {message.attachment && <div className="mb-1.5"><AttachmentPreview attachment={message.attachment} /></div>}
-                {message.text && <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">{message.text}</div>}
+                {message.text && <div className="text-sm leading-relaxed whitespace-pre-wrap break-all">{message.text}</div>}
                 <div className={`flex items-center gap-1.5 mt-1 ${isOwn ? "justify-end" : "justify-start"}`}>
                     <span className="font-mono text-[10px] text-muted-foreground">{time}</span>
                     {isOwn && !message.is_group && <TickIcon status={message.status} />}
