@@ -167,7 +167,7 @@ export default function ChatPage() {
         : {};
 
     return (
-        <div className="flex h-[calc(100vh-48px)] md:h-screen w-full overflow-hidden">
+        <div className="flex h-[calc(100vh-48px)] md:h-screen w-full overflow-x-hidden overflow-y-hidden">
             {/* Sidebar */}
             <div className={`${chatId ? "hidden md:flex" : "flex"} md:w-80 w-full border-r border-border bg-card flex-col shrink-0`}>
                 <div className="p-3 md:p-4 border-b border-border">
